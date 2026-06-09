@@ -1,0 +1,211 @@
+{
+  "name": "Doktor Verileri Denemesi",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "doktorverisi",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -464,
+        0
+      ],
+      "id": "6d5a7515-e3fa-487f-ab4a-c925eb7b7f21",
+      "name": "Webhook",
+      "webhookId": "61438c61-f1b6-47e6-b35f-9f89da474abc"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.body.url }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -272,
+        0
+      ],
+      "id": "6e25a636-42de-4187-93d1-34ea2333d71f",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "extractHtmlContent",
+        "extractionValues": {
+          "values": [
+            {
+              "key": "sayfa_basligi",
+              "cssSelector": "body"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        -80,
+        0
+      ],
+      "id": "1e18d4e5-2786-4e2b-b56f-e2e937eeca21",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        624,
+        0
+      ],
+      "id": "7801530f-36e6-41b3-b402-614268e04a74",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "text": "={{ $json.sayfa_basligi }}",
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "[\n  {\n    \"isim\": \"Doctor Name (e.g. Prof. Dr. Ercan Bıçakcı)\",\n    \"uzmanlik\": \"Medical Specialty (e.g. Cardiology)\",\n    \"fotograf_url_adresi\": \"/assets/doctors/photo.jpg (CRITICAL INSTRUCTION: Extract the exact URL of the doctor's portrait photograph. You must deeply search inside 'data-src', 'data-lazy', or 'src' attributes. Do NOT extract UI icons, button graphics, or ANY file ending in '.svg' such as 'hizli-randevu-icon.svg'. If you cannot find a .jpg, .jpeg, or .png portrait image, you MUST leave this field completely empty. NEVER return an SVG file.)\"\n  }\n]",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        112,
+        0
+      ],
+      "id": "504327e6-aa92-496d-a8a8-8fd47903a6b4",
+      "name": "Information Extractor"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.1-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        112,
+        192
+      ],
+      "id": "9a0162b4-2148-4a99-934f-93aeeee039ee",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "jBoV1DdUtWtg6CRZ",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Webhook'tan orijinal adresi alıyoruz\nconst originalUrl = $('Webhook').first().json.body.url;\nconst urlParts = originalUrl.split('/');\nconst baseUrl = urlParts[0] + \"//\" + urlParts[2];\n\n// 2. Information Extractor'dan çıkan veriyi al\nlet data = $input.first().json;\nlet doctors = data.output || data; \n\nif (!Array.isArray(doctors)) {\n  doctors = [doctors];\n}\n\n// 4. Her doktorun fotoğraf linkini kontrol et\ndoctors.forEach(doktor => {\n  let imgUrl = doktor.fotograf_url_adresi || doktor.fotograf || \"\";\n  \n  if (imgUrl.trim() !== \"\") {\n    \n    // GÜVENLİK: Eğer link bilerek uydurulmuşsa (.svg ikonuysa veya doktor profil linkiyse)\n    if (imgUrl.toLowerCase().includes('.svg') || (imgUrl.includes('/doktor/') && !imgUrl.includes('.'))) {\n      imgUrl = \"\"; // Çöpe at\n    } else {\n      // Eğer gerçek bir linkse ve başında http yoksa, site adresini ekle\n      if (!imgUrl.startsWith('http')) {\n        imgUrl = baseUrl + (imgUrl.startsWith('/') ? '' : '/') + imgUrl;\n      }\n    }\n  }\n\n  // Temizlenen (veya domain eklenen) linki her halükarda nesneye geri kaydet\n  if (\"fotograf_url_adresi\" in doktor) doktor.fotograf_url_adresi = imgUrl;\n  if (\"fotograf\" in doktor) doktor.fotograf = imgUrl;\n});\n\nreturn data;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ],
+      "id": "8c8a189e-6b5f-4bc6-9b24-98a41e6b732f",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "957bb84d-e369-4c06-ac72-716bd5f094e5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "31aa657f22d85647c62b0193f2e948c71cfa42169555128766609f828eccaa9f"
+  },
+  "id": "yq4OOAgz2vVuWhHF",
+  "tags": []
+}
